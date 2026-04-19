@@ -61,13 +61,10 @@ minecraft {
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 repositories {
-    exclusiveContent {
-        forRepository {
-            maven {
-                url "https://cursemaven.com"
-            }
-        }
-        filter {
+    maven {
+        name = "Curse Maven"
+        url = "https://www.cursemaven.com"
+        content {
             includeGroup "curse.maven"
         }
     }
