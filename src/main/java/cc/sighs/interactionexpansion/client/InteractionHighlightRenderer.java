@@ -18,14 +18,16 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.joml.Matrix4f;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Mod.EventBusSubscriber(modid = InteractionExpansion.MOD_ID, value = Dist.CLIENT)
 public class InteractionHighlightRenderer {
-    private static final float HIGHLIGHT_ALPHA = 0.3f;
+    private static final float HIGHLIGHT_ALPHA = 0.5f;
     private static final int HIGHLIGHT_COLOR = 0x00FF00;
     private static final int LOOKING_AT_COLOR = 0xFFFF00;
+    private static final int MAX_HIGHLIGHT_BLOCKS = 5;
+    private static final int SEARCH_RADIUS = 32;
 
     @SubscribeEvent
     public static void onRenderLevel(RenderLevelStageEvent event) {
@@ -39,37 +41,43 @@ public class InteractionHighlightRenderer {
 
         if (hitResult instanceof BlockHitResult blockHitResult) {
             Block block = mc.level.getBlockState(blockHitResult.getBlockPos()).getBlock();
-            if (!InteractionManager.getInteractions(block).isEmpty()) {
+            List<InteractionManager.NamedInteraction> interactions = InteractionManager.getNamedInteractions(block);
+            if (!interactions.isEmpty()) {
                 lookingAtPos = blockHitResult.getBlockPos();
             }
         }
 
-        double renderDistance = mc.options.renderDistance().get() * 16.0;
-        Vec3 cameraPos = mc.gameRenderer.getMainCamera().getPosition();
-
-        List<BlockPos> highlightBlocks = new ArrayList<>();
-
-        int range = (int) Math.ceil(renderDistance / 16.0);
+        Vec3 playerVec = mc.player.getPosition(1.0f);
         BlockPos playerPos = mc.player.blockPosition();
 
-        for (int x = -range; x <= range; x++) {
-            for (int y = -range; y <= range; y++) {
-                for (int z = -range; z <= range; z++) {
+        List<BlockPosWithDistance> candidateBlocks = new ArrayList<>();
+
+        for (int x = -SEARCH_RADIUS; x <= SEARCH_RADIUS; x++) {
+            for (int y = -SEARCH_RADIUS; y <= SEARCH_RADIUS; y++) {
+                for (int z = -SEARCH_RADIUS; z <= SEARCH_RADIUS; z++) {
                     BlockPos pos = playerPos.offset(x, y, z);
 
-                    if (pos.distSqr(playerPos) > renderDistance * renderDistance) continue;
+                    double distSqr = playerVec.distanceToSqr(Vec3.atCenterOf(pos));
+                    if (distSqr > SEARCH_RADIUS * SEARCH_RADIUS) continue;
 
                     Block block = mc.level.getBlockState(pos).getBlock();
-                    if (!InteractionManager.getInteractions(block).isEmpty()) {
-                        if (lookingAtPos == null || pos.equals(lookingAtPos)) {
-                            highlightBlocks.add(pos);
-                        }
+                    List<InteractionManager.NamedInteraction> interactions = InteractionManager.getNamedInteractions(block);
+
+                    if (!interactions.isEmpty()) {
+                        candidateBlocks.add(new BlockPosWithDistance(pos, distSqr));
                     }
                 }
             }
         }
 
-        if (highlightBlocks.isEmpty()) return;
+        if (candidateBlocks.isEmpty()) return;
+
+        candidateBlocks.sort(Comparator.comparingDouble(BlockPosWithDistance::distance));
+
+        List<BlockPos> highlightBlocks = candidateBlocks.stream()
+            .limit(MAX_HIGHLIGHT_BLOCKS)
+            .map(BlockPosWithDistance::pos)
+            .collect(Collectors.toList());
 
         PoseStack poseStack = event.getPoseStack();
         poseStack.pushPose();
@@ -82,7 +90,7 @@ public class InteractionHighlightRenderer {
         RenderSystem.disableDepthTest();
         RenderSystem.setShader(GameRenderer::getPositionColorShader);
 
-        bufferBuilder.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
+        bufferBuilder.begin(VertexFormat.Mode.DEBUG_LINES, DefaultVertexFormat.POSITION_COLOR);
 
         Matrix4f matrix = poseStack.last().pose();
 
@@ -90,12 +98,12 @@ public class InteractionHighlightRenderer {
             VoxelShape shape = mc.level.getBlockState(pos).getShape(mc.level, pos);
             if (shape.isEmpty()) continue;
 
-            int color = (pos.equals(lookingAtPos)) ? LOOKING_AT_COLOR : HIGHLIGHT_COLOR;
+            int color = (lookingAtPos != null && pos.equals(lookingAtPos)) ? LOOKING_AT_COLOR : HIGHLIGHT_COLOR;
             float alpha = HIGHLIGHT_ALPHA;
 
             float r = ((color >> 16) & 0xFF) / 255.0f;
             float g = ((color >> 8) & 0xFF) / 255.0f;
-            float b = 0;
+            float b = (color & 0xFF) / 255.0f;
 
             shape.forAllEdges((minX, minY, minZ, maxX, maxY, maxZ) -> {
                 double x1 = minX + pos.getX();
@@ -119,4 +127,6 @@ public class InteractionHighlightRenderer {
 
         poseStack.popPose();
     }
+
+    private record BlockPosWithDistance(BlockPos pos, double distance) {}
 }

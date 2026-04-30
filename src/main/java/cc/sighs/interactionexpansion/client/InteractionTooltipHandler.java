@@ -74,7 +74,10 @@ public class InteractionTooltipHandler {
 
         for (int i = 0; i < visibleCount; i++) {
             int actualIndex = i;
-            String text = "• 交互 #" + (actualIndex + 1);
+            InteractionManager.NamedInteraction namedInteraction =
+                InteractionManager.getNamedInteractions(block).get(actualIndex);
+            String interactionName = namedInteraction.name();
+            String text = "• " + interactionName;
             int yPos = mouseY + PADDING + ITEM_HEIGHT + (i * ITEM_HEIGHT);
 
             boolean isSelected = (actualIndex == currentSelectedIndex);
@@ -89,10 +92,6 @@ public class InteractionTooltipHandler {
             int yPos = mouseY + PADDING + ITEM_HEIGHT + (visibleCount * ITEM_HEIGHT);
             guiGraphics.drawString(font, moreText, mouseX + PADDING + 4, yPos, 0x888888, false);
         }
-
-        String selectInfo = String.format("§b当前选中: #%d", currentSelectedIndex + 1);
-        int infoY = mouseY + boxHeight - 10;
-        guiGraphics.drawString(font, selectInfo, mouseX + PADDING, infoY, 0x55FFFF, false);
 
         RenderSystem.disableBlend();
     }

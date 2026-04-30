@@ -9,9 +9,7 @@ import dev.latvian.mods.kubejs.util.ClassFilter;
 public class InteractionExpansionJSPlugins extends KubeJSPlugin {
     @Override
     public void registerBindings(BindingsEvent event) {
-        if (event.getType() == ScriptType.SERVER) {
-            event.add("InteractionExpansion", InteractionExpansionKubeJS.class);
-        }
+        event.add("InteractionExpansion", InteractionExpansionKubeJS.class);
     }
 
     @Override
