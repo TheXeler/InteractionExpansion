@@ -6,27 +6,26 @@ import net.minecraft.world.level.block.Block;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.*;
-import java.util.function.BiFunction;
 
 public class InteractionManager {
-    private static final Map<Block, List<InteractionHandler>> INTERACTIONS = new HashMap<>();
+    private static final Map<Block, List<InteractionProcesser>> INTERACTIONS = new HashMap<>();
 
-    public static void addInteraction(Block block, InteractionHandler handler) {
-        INTERACTIONS.computeIfAbsent(block, k -> new ArrayList<>()).add(handler);
+    public static void addInteraction(Block block, InteractionProcesser processer) {
+        INTERACTIONS.computeIfAbsent(block, k -> new ArrayList<>()).add(processer);
         InteractionExpansion.LOGGER.debug("Added interaction to block: {}", ForgeRegistries.BLOCKS.getKey(block));
     }
 
-    public static void addInteraction(String blockId, InteractionHandler handler) {
+    public static void addInteraction(String blockId, InteractionProcesser processer) {
         ResourceLocation location = new ResourceLocation(blockId);
         Block block = ForgeRegistries.BLOCKS.getValue(location);
         if (block != null) {
-            addInteraction(block, handler);
+            addInteraction(block, processer);
         } else {
             InteractionExpansion.LOGGER.warn("Block not found: {}", blockId);
         }
     }
 
-    public static List<InteractionHandler> getInteractions(Block block) {
+    public static List<InteractionProcesser> getInteractions(Block block) {
         return INTERACTIONS.getOrDefault(block, Collections.emptyList());
     }
 
@@ -41,7 +40,7 @@ public class InteractionManager {
     }
 
     @FunctionalInterface
-    public interface InteractionHandler {
+    public interface InteractionProcesser {
         void handle(InteractionContext context);
     }
 

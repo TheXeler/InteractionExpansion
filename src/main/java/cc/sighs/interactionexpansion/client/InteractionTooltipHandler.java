@@ -13,6 +13,7 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.RenderGuiOverlayEvent;
+import net.minecraftforge.client.event.InputEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
@@ -23,6 +24,13 @@ public class InteractionTooltipHandler {
     private static final int MAX_VISIBLE_ITEMS = 5;
     private static final int ITEM_HEIGHT = 12;
     private static final int PADDING = 4;
+
+    private static int currentSelectedIndex = 0;
+    private static BlockPos lastBlockPos = null;
+
+    public static int getCurrentSelectedIndex() {
+        return currentSelectedIndex;
+    }
 
     @SubscribeEvent
     public static void onRenderOverlay(RenderGuiOverlayEvent.Pre event) {
@@ -35,16 +43,24 @@ public class InteractionTooltipHandler {
         BlockPos pos = blockHitResult.getBlockPos();
         Block block = mc.level.getBlockState(pos).getBlock();
 
-        List<InteractionManager.InteractionHandler> interactions = InteractionManager.getInteractions(block);
-        if (interactions.isEmpty()) return;
+        List<InteractionManager.InteractionProcesser> interactions = InteractionManager.getInteractions(block);
+        if (interactions.isEmpty()) {
+            resetSelection();
+            return;
+        }
+
+        if (!pos.equals(lastBlockPos)) {
+            currentSelectedIndex = 0;
+            lastBlockPos = pos;
+        }
 
         GuiGraphics guiGraphics = event.getGuiGraphics();
         Font font = mc.font;
 
         int interactionCount = interactions.size();
         int visibleCount = Math.min(interactionCount, MAX_VISIBLE_ITEMS);
-        int boxWidth = 150;
-        int boxHeight = visibleCount * ITEM_HEIGHT + PADDING * 2;
+        int boxWidth = 180;
+        int boxHeight = visibleCount * ITEM_HEIGHT + PADDING * 2 + 8;
 
         int mouseX = event.getWindow().getGuiScaledWidth() / 2 + 8;
         int mouseY = event.getWindow().getGuiScaledHeight() / 2 - 8;
@@ -57,9 +73,15 @@ public class InteractionTooltipHandler {
         guiGraphics.drawString(font, title, mouseX + PADDING, mouseY + PADDING, 0xFFFFFF, true);
 
         for (int i = 0; i < visibleCount; i++) {
-            String text = "• 交互 #" + (i + 1);
+            int actualIndex = i;
+            String text = "• 交互 #" + (actualIndex + 1);
             int yPos = mouseY + PADDING + ITEM_HEIGHT + (i * ITEM_HEIGHT);
-            guiGraphics.drawString(font, text, mouseX + PADDING + 4, yPos, 0xAAAAAA, false);
+
+            boolean isSelected = (actualIndex == currentSelectedIndex);
+            int color = isSelected ? 0xFFFF55 : 0xAAAAAA;
+            String prefix = isSelected ? "§e▶ " : "  ";
+
+            guiGraphics.drawString(font, prefix + text, mouseX + PADDING + 4, yPos, color, false);
         }
 
         if (interactionCount > MAX_VISIBLE_ITEMS) {
@@ -68,6 +90,40 @@ public class InteractionTooltipHandler {
             guiGraphics.drawString(font, moreText, mouseX + PADDING + 4, yPos, 0x888888, false);
         }
 
+        String selectInfo = String.format("§b当前选中: #%d", currentSelectedIndex + 1);
+        int infoY = mouseY + boxHeight - 10;
+        guiGraphics.drawString(font, selectInfo, mouseX + PADDING, infoY, 0x55FFFF, false);
+
         RenderSystem.disableBlend();
+    }
+
+    @SubscribeEvent
+    public static void onMouseScroll(InputEvent.MouseScrollingEvent event) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null || mc.player == null) return;
+
+        HitResult hitResult = mc.hitResult;
+        if (!(hitResult instanceof BlockHitResult blockHitResult)) return;
+
+        BlockPos pos = blockHitResult.getBlockPos();
+        Block block = mc.level.getBlockState(pos).getBlock();
+
+        List<InteractionManager.InteractionProcesser> interactions = InteractionManager.getInteractions(block);
+        if (interactions.isEmpty()) return;
+
+        double scrollDelta = event.getScrollDelta();
+
+        if (scrollDelta < 0) {
+            currentSelectedIndex = (currentSelectedIndex + 1) % interactions.size();
+        } else if (scrollDelta > 0) {
+            currentSelectedIndex = (currentSelectedIndex - 1 + interactions.size()) % interactions.size();
+        }
+
+        event.setCanceled(true);
+    }
+
+    private static void resetSelection() {
+        currentSelectedIndex = 0;
+        lastBlockPos = null;
     }
 }
