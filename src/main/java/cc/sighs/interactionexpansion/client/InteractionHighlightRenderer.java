@@ -8,125 +8,158 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.phys.shapes.VoxelShape;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.joml.Matrix4f;
 
-import java.util.*;
-import java.util.stream.Collectors;
-
 @Mod.EventBusSubscriber(modid = InteractionExpansion.MOD_ID, value = Dist.CLIENT)
 public class InteractionHighlightRenderer {
-    private static final float HIGHLIGHT_ALPHA = 0.5f;
-    private static final int HIGHLIGHT_COLOR = 0x00FF00;
-    private static final int LOOKING_AT_COLOR = 0xFFFF00;
-    private static final int MAX_HIGHLIGHT_BLOCKS = 5;
-    private static final int SEARCH_RADIUS = 32;
 
     @SubscribeEvent
-    public static void onRenderLevel(RenderLevelStageEvent event) {
-        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS) return;
-
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.level == null || mc.player == null) return;
-
-        HitResult hitResult = mc.hitResult;
-        BlockPos lookingAtPos = null;
-
-        if (hitResult instanceof BlockHitResult blockHitResult) {
-            Block block = mc.level.getBlockState(blockHitResult.getBlockPos()).getBlock();
-            List<InteractionManager.NamedInteraction> interactions = InteractionManager.getNamedInteractions(block);
-            if (!interactions.isEmpty()) {
-                lookingAtPos = blockHitResult.getBlockPos();
-            }
+    public static void onRenderLevelStage(RenderLevelStageEvent event) {
+        //TODO : 拼尽全力未能肘赢
+        /*
+        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_LEVEL) {
+            return;
         }
 
-        Vec3 playerVec = mc.player.getPosition(1.0f);
+        Minecraft mc = Minecraft.getInstance();
+
+        if (mc.player == null || mc.level == null) {
+            return;
+        }
+
+        Vec3 cameraPos = mc.gameRenderer.getMainCamera().getPosition();
+        double renderDistance = 16.0;
+
         BlockPos playerPos = mc.player.blockPosition();
+        int range = (int) Math.ceil(renderDistance);
 
-        List<BlockPosWithDistance> candidateBlocks = new ArrayList<>();
+        RenderSystem.disableDepthTest();
+        RenderSystem.enableBlend();
+        RenderSystem.blendFuncSeparate(770, 771, 1, 0);
+        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+        RenderSystem.setShader(GameRenderer::getPositionColorShader);
 
-        for (int x = -SEARCH_RADIUS; x <= SEARCH_RADIUS; x++) {
-            for (int y = -SEARCH_RADIUS; y <= SEARCH_RADIUS; y++) {
-                for (int z = -SEARCH_RADIUS; z <= SEARCH_RADIUS; z++) {
-                    BlockPos pos = playerPos.offset(x, y, z);
+        Tesselator tesselator = Tesselator.getInstance();
+        BufferBuilder bufferBuilder = tesselator.getBuilder();
+        bufferBuilder.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
 
-                    double distSqr = playerVec.distanceToSqr(Vec3.atCenterOf(pos));
-                    if (distSqr > SEARCH_RADIUS * SEARCH_RADIUS) continue;
+        PoseStack poseStack = event.getPoseStack();
+        poseStack.pushPose();
+        poseStack.translate(-cameraPos.x, -cameraPos.y, -cameraPos.z);
 
-                    Block block = mc.level.getBlockState(pos).getBlock();
-                    List<InteractionManager.NamedInteraction> interactions = InteractionManager.getNamedInteractions(block);
+        Matrix4f matrix = poseStack.last().pose();
 
-                    if (!interactions.isEmpty()) {
-                        candidateBlocks.add(new BlockPosWithDistance(pos, distSqr));
+        for (int x = playerPos.getX() - range; x <= playerPos.getX() + range; x++) {
+            for (int y = playerPos.getY() - range; y <= playerPos.getY() + range; y++) {
+                for (int z = playerPos.getZ() - range; z <= playerPos.getZ() + range; z++) {
+                    BlockPos pos = new BlockPos(x, y, z);
+
+                    if (!mc.level.isLoaded(pos)) {
+                        continue;
+                    }
+
+                    BlockState blockState = mc.level.getBlockState(pos);
+                    Block block = blockState.getBlock();
+
+                    if (InteractionManager.getInteractionCount(block) > 0) {
+                        double centerX = pos.getX() + 0.5;
+                        double centerY = pos.getY() + 0.5;
+                        double centerZ = pos.getZ() + 0.5;
+
+                        float size = 0.15F;
+
+                        bufferBuilder.vertex(matrix, (float)(centerX - size), (float)(centerY - size), (float)(centerZ - size))
+                                .color(255, 255, 255, 255)
+                                .endVertex();
+                        bufferBuilder.vertex(matrix, (float)(centerX + size), (float)(centerY - size), (float)(centerZ - size))
+                                .color(255, 255, 255, 255)
+                                .endVertex();
+                        bufferBuilder.vertex(matrix, (float)(centerX + size), (float)(centerY + size), (float)(centerZ - size))
+                                .color(255, 255, 255, 255)
+                                .endVertex();
+                        bufferBuilder.vertex(matrix, (float)(centerX - size), (float)(centerY + size), (float)(centerZ - size))
+                                .color(255, 255, 255, 255)
+                                .endVertex();
+
+                        bufferBuilder.vertex(matrix, (float)(centerX - size), (float)(centerY - size), (float)(centerZ + size))
+                                .color(255, 255, 255, 255)
+                                .endVertex();
+                        bufferBuilder.vertex(matrix, (float)(centerX + size), (float)(centerY - size), (float)(centerZ + size))
+                                .color(255, 255, 255, 255)
+                                .endVertex();
+                        bufferBuilder.vertex(matrix, (float)(centerX + size), (float)(centerY + size), (float)(centerZ + size))
+                                .color(255, 255, 255, 255)
+                                .endVertex();
+                        bufferBuilder.vertex(matrix, (float)(centerX - size), (float)(centerY + size), (float)(centerZ + size))
+                                .color(255, 255, 255, 255)
+                                .endVertex();
+
+                        bufferBuilder.vertex(matrix, (float)(centerX - size), (float)(centerY - size), (float)(centerZ - size))
+                                .color(255, 255, 255, 255)
+                                .endVertex();
+                        bufferBuilder.vertex(matrix, (float)(centerX - size), (float)(centerY - size), (float)(centerZ + size))
+                                .color(255, 255, 255, 255)
+                                .endVertex();
+                        bufferBuilder.vertex(matrix, (float)(centerX - size), (float)(centerY + size), (float)(centerZ + size))
+                                .color(255, 255, 255, 255)
+                                .endVertex();
+                        bufferBuilder.vertex(matrix, (float)(centerX - size), (float)(centerY + size), (float)(centerZ - size))
+                                .color(255, 255, 255, 255)
+                                .endVertex();
+
+                        bufferBuilder.vertex(matrix, (float)(centerX + size), (float)(centerY - size), (float)(centerZ - size))
+                                .color(255, 255, 255, 255)
+                                .endVertex();
+                        bufferBuilder.vertex(matrix, (float)(centerX + size), (float)(centerY - size), (float)(centerZ + size))
+                                .color(255, 255, 255, 255)
+                                .endVertex();
+                        bufferBuilder.vertex(matrix, (float)(centerX + size), (float)(centerY + size), (float)(centerZ + size))
+                                .color(255, 255, 255, 255)
+                                .endVertex();
+                        bufferBuilder.vertex(matrix, (float)(centerX + size), (float)(centerY + size), (float)(centerZ - size))
+                                .color(255, 255, 255, 255)
+                                .endVertex();
+
+                        bufferBuilder.vertex(matrix, (float)(centerX - size), (float)(centerY - size), (float)(centerZ - size))
+                                .color(255, 255, 255, 255)
+                                .endVertex();
+                        bufferBuilder.vertex(matrix, (float)(centerX - size), (float)(centerY - size), (float)(centerZ + size))
+                                .color(255, 255, 255, 255)
+                                .endVertex();
+                        bufferBuilder.vertex(matrix, (float)(centerX + size), (float)(centerY - size), (float)(centerZ + size))
+                                .color(255, 255, 255, 255)
+                                .endVertex();
+                        bufferBuilder.vertex(matrix, (float)(centerX + size), (float)(centerY - size), (float)(centerZ - size))
+                                .color(255, 255, 255, 255)
+                                .endVertex();
+
+                        bufferBuilder.vertex(matrix, (float)(centerX - size), (float)(centerY + size), (float)(centerZ - size))
+                                .color(255, 255, 255, 255)
+                                .endVertex();
+                        bufferBuilder.vertex(matrix, (float)(centerX - size), (float)(centerY + size), (float)(centerZ + size))
+                                .color(255, 255, 255, 255)
+                                .endVertex();
+                        bufferBuilder.vertex(matrix, (float)(centerX + size), (float)(centerY + size), (float)(centerZ + size))
+                                .color(255, 255, 255, 255)
+                                .endVertex();
+                        bufferBuilder.vertex(matrix, (float)(centerX + size), (float)(centerY + size), (float)(centerZ - size))
+                                .color(255, 255, 255, 255)
+                                .endVertex();
                     }
                 }
             }
         }
 
-        if (candidateBlocks.isEmpty()) return;
-
-        candidateBlocks.sort(Comparator.comparingDouble(BlockPosWithDistance::distance));
-
-        List<BlockPos> highlightBlocks = candidateBlocks.stream()
-            .limit(MAX_HIGHLIGHT_BLOCKS)
-            .map(BlockPosWithDistance::pos)
-            .collect(Collectors.toList());
-
-        PoseStack poseStack = event.getPoseStack();
-        poseStack.pushPose();
-
-        Tesselator tesselator = Tesselator.getInstance();
-        BufferBuilder bufferBuilder = tesselator.getBuilder();
-
-        RenderSystem.enableBlend();
-        RenderSystem.defaultBlendFunc();
-        RenderSystem.disableDepthTest();
-        RenderSystem.setShader(GameRenderer::getPositionColorShader);
-
-        bufferBuilder.begin(VertexFormat.Mode.DEBUG_LINES, DefaultVertexFormat.POSITION_COLOR);
-
-        Matrix4f matrix = poseStack.last().pose();
-
-        for (BlockPos pos : highlightBlocks) {
-            VoxelShape shape = mc.level.getBlockState(pos).getShape(mc.level, pos);
-            if (shape.isEmpty()) continue;
-
-            int color = (lookingAtPos != null && pos.equals(lookingAtPos)) ? LOOKING_AT_COLOR : HIGHLIGHT_COLOR;
-            float alpha = HIGHLIGHT_ALPHA;
-
-            float r = ((color >> 16) & 0xFF) / 255.0f;
-            float g = ((color >> 8) & 0xFF) / 255.0f;
-            float b = (color & 0xFF) / 255.0f;
-
-            shape.forAllEdges((minX, minY, minZ, maxX, maxY, maxZ) -> {
-                double x1 = minX + pos.getX();
-                double y1 = minY + pos.getY();
-                double z1 = minZ + pos.getZ();
-                double x2 = maxX + pos.getX();
-                double y2 = maxY + pos.getY();
-                double z2 = maxZ + pos.getZ();
-
-                bufferBuilder.vertex(matrix, (float) x1, (float) y1, (float) z1)
-                    .color(r, g, b, alpha).endVertex();
-                bufferBuilder.vertex(matrix, (float) x2, (float) y2, (float) z2)
-                    .color(r, g, b, alpha).endVertex();
-            });
-        }
-
         tesselator.end();
-
+        poseStack.popPose();
         RenderSystem.enableDepthTest();
         RenderSystem.disableBlend();
-
-        poseStack.popPose();
+        */
     }
-
-    private record BlockPosWithDistance(BlockPos pos, double distance) {}
 }
